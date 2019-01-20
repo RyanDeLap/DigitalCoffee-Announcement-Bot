@@ -21,7 +21,6 @@ import (
 )
 
 var fromEmails []string = []string{
-	"v3rglas@gmail.com",
 	"robinpowell@missouristate.edu",
 	"ajaykatangur@missouristate.edu",
 }
@@ -32,13 +31,11 @@ var blackListWords []string = []string{
 	"Delap",
 }
 
-var messageTemplate string = "@everyone\r\n**{{.Subject}}**\r\nFrom: {{.SenderName}}\r\n\r\n```{{.MessageText}}```"
+var messageTemplate string = "\r\n**{{.Subject}}**\r\nFrom: {{.SenderName}}\r\n\r\n```{{.MessageText}}```"
 
 var imapClient *client.Client
 var discordClient *discordgo.Session
 var channelId string
-
-var lastMessages []int
 
 type MailMessage struct {
 	Subject     string
@@ -97,6 +94,9 @@ func main() {
 }
 
 func mailboxWatcher() {
+
+	lastMessages := make([]string, 0)
+
 	defer func() {
 		fmt.Println("left function")
 	}()
@@ -110,14 +110,15 @@ func mailboxWatcher() {
 		// Get the last 5 messages
 		from := uint32(1)
 		to := mbox.Messages
-		if mbox.Messages > 10 {
-			from = mbox.Messages - 10
+		if mbox.Messages > 5 {
+			from = mbox.Messages - 4
 		}
+
 		seqset := new(imap.SeqSet)
 		seqset.AddRange(from, to)
 
 		section := &imap.BodySectionName{}
-		messages := make(chan *imap.Message, 20)
+		messages := make(chan *imap.Message, 5)
 		done := make(chan error, 1)
 		go func() {
 			done <- imapClient.Fetch(seqset, []imap.FetchItem{imap.FetchEnvelope, section.FetchItem()}, messages)
@@ -137,17 +138,22 @@ func mailboxWatcher() {
 				break
 			}
 
-			fmt.Println("date:", msg.Envelope.Date)
+			if len(lastMessages) < 5 {
+				fmt.Println("Adding subject to queue: " + msg.Envelope.Subject)
+				lastMessages = append(lastMessages, msg.Envelope.Subject)
+			} else {
+				//If our queue doesn't contain one of the messages, we know its a new message. Pop the old subject, add the new one.
+				if contains(lastMessages, msg.Envelope.Subject) == false {
+					fmt.Println("Popping oldest, adding newest. ")
+					lastMessages = lastMessages[1:]
+					lastMessages = append(lastMessages, msg.Envelope.Subject)
+					fmt.Println(strings.Join(lastMessages, ", "))
 
-			// skip if message is older than 5 minutes
-			if time.Now().Sub(msg.Envelope.Date) > (5 * time.Minute) {
-				fmt.Println("skipped due to old msg")
-				continue
-			}
+				} else {
+					fmt.Println("No changes detected...")
+					continue //If we already have scanned our message before, don't bother doing it again.
+				}
 
-			if !msg.InternalDate.After(lastCheck) {
-				fmt.Println("date before last check")
-				continue
 			}
 
 			senderName := ""
@@ -210,21 +216,29 @@ func mailboxWatcher() {
 			// subject = msg.Envelope.Subject
 			// message = messageText
 
-			sendMessageWithTemplate(MailMessage{
-				From:        senderName,
-				Subject:     msg.Envelope.Subject,
-				MessageText: messageText,
-			})
+			send := true
+
+			for _, word := range blackListWords {
+				if strings.Contains(messageText, word) {
+					send = false
+				}
+			}
+
+			if send {
+				sendMessageWithTemplate(MailMessage{
+					From:        senderName,
+					Subject:     msg.Envelope.Subject,
+					MessageText: messageText,
+				})
+			}
 		}
 
 		if err := <-done; err != nil {
 			log.Fatal(err)
 		}
 
-		lastCheck = time.Now()
-
 		fmt.Println("sleeping")
-		time.Sleep(1 * time.Minute)
+		time.Sleep(2 * time.Minute)
 	}
 }
 
@@ -242,8 +256,21 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if m.Content == "status" {
+	if m.Content == "!botstatus" {
 		s.ChannelMessageSend(m.ChannelID, "I'm alive!")
 	}
 
+	if m.Content == "!source" {
+		s.ChannelMessageSend(m.ChannelID, "https://github.com/RyanDeLap/DigitalCoffee-Announcement-Bot")
+	}
+
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
