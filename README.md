@@ -9,4 +9,4 @@ bash build.sh
 
 Thanks to [Josiah White](https://github.com/josiah2009) for helping me knock this out in a couple of hours. 
 
-The link for the Computer Science discord for Missouri State is https://discord.gg/q8cKPa
+The link for the Computer Science discord for Missouri State is https://discord.gg/xbHctWh
