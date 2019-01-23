@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"io"
 	"io/ioutil"
 	"log"
@@ -23,6 +24,7 @@ import (
 var fromEmails []string = []string{
 	"robinpowell@missouristate.edu",
 	"ajaykatangur@missouristate.edu",
+	"v3rglas@gmail.com",
 }
 
 var blackListWords []string = []string{
@@ -31,7 +33,7 @@ var blackListWords []string = []string{
 	"Delap",
 }
 
-var messageTemplate string = "\r\n**{{.Subject}}**\r\nFrom: {{.SenderName}}\r\n\r\n```{{.MessageText}}```"
+var messageTemplate string = "@everyone\r\n**{{.Subject}}**\r\nFrom: {{.SenderName}}\r\n\r\n```{{.MessageText}}```"
 
 var imapClient *client.Client
 var discordClient *discordgo.Session
@@ -69,16 +71,7 @@ func main() {
 
 	discordClient.AddHandler(messageCreate)
 
-	// Connect to server
-	imapClient, err = client.DialTLS(os.Args[3], nil)
-	if err != nil {
-		log.Fatal("Error connecting to mail server:", err)
-	}
-
-	if err := imapClient.Login(os.Args[4], os.Args[5]); err != nil {
-		log.Fatal("Error logging into imap server:", err)
-	}
-	defer imapClient.Logout()
+	setupImap()
 
 	go mailboxWatcher()
 
@@ -93,6 +86,19 @@ func main() {
 	discordClient.Close()
 }
 
+func setupImap() {
+	var err error
+	// Connect to server
+	imapClient, err = client.DialTLS(os.Args[3], nil)
+	if err != nil {
+		log.Fatal("Error connecting to mail server:", err)
+	}
+
+	if err := imapClient.Login(os.Args[4], os.Args[5]); err != nil {
+		log.Fatal("Error logging into imap server:", err)
+	}
+}
+
 func mailboxWatcher() {
 
 	lastMessages := make([]string, 0)
@@ -105,6 +111,8 @@ func mailboxWatcher() {
 		mbox, err := imapClient.Select("INBOX", false)
 		if err != nil {
 			log.Fatal(err)
+			setupImap()
+			continue
 		}
 
 		// Get the last 5 messages
@@ -141,6 +149,7 @@ func mailboxWatcher() {
 			if len(lastMessages) < 5 {
 				fmt.Println("Adding subject to queue: " + msg.Envelope.Subject)
 				lastMessages = append(lastMessages, msg.Envelope.Subject)
+				continue //Just ignore all previous emails incase of duplicate.
 			} else {
 				//If our queue doesn't contain one of the messages, we know its a new message. Pop the old subject, add the new one.
 				if contains(lastMessages, msg.Envelope.Subject) == false {
@@ -204,6 +213,7 @@ func mailboxWatcher() {
 					messageText = strings.Replace(messageText, "&nbsp;", " ", -1)
 					messageText = strings.Replace(messageText, "\r", "", -1)
 					messageText = strings.Replace(messageText, "\n ", " ", -1)
+					messageText = html.UnescapeString(messageText)
 					newLineRegex, _ := regexp.Compile("\n\n(\n*)")
 					messageText = newLineRegex.ReplaceAllString(messageText, "\n\n")
 					messageStartNewLine, _ := regexp.Compile("^(\n*)")
