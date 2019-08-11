@@ -24,7 +24,7 @@ import (
 var fromEmails []string = []string{
 	"robinpowell@missouristate.edu",
 	"ajaykatangur@missouristate.edu",
-	"v3rglas@gmail.com",
+	"ryandelap98@gmail.com",
 }
 
 var blackListWords []string = []string{
@@ -173,8 +173,10 @@ func mailboxWatcher() {
 
 				// check our list of valid emails
 				for _, email := range fromEmails {
+					fmt.Println(email)
 					if strings.ToLower(email) == address {
 						announceThisEmail = true
+						fmt.Println("Announce should be true.")
 						break
 					}
 				}
@@ -198,7 +200,7 @@ func mailboxWatcher() {
 				}
 
 				switch h := p.Header.(type) {
-				case mail.TextHeader:
+				case *mail.InlineHeader:
 					contentType, _, _ := h.ContentType()
 					b, _ := ioutil.ReadAll(p.Body)
 					if contentType != "text/html" {
@@ -248,7 +250,7 @@ func mailboxWatcher() {
 		}
 
 		fmt.Println("sleeping")
-		time.Sleep(2 * time.Minute)
+		time.Sleep(60 * time.Second)
 	}
 }
 
@@ -256,7 +258,7 @@ func sendMessageWithTemplate(msg MailMessage) {
 	outMsg := strings.Replace(messageTemplate, "{{.Subject}}", msg.Subject, -1)
 	outMsg = strings.Replace(outMsg, "{{.SenderName}}", msg.From, -1)
 	outMsg = strings.Replace(outMsg, "{{.MessageText}}", msg.MessageText, -1)
-
+	fmt.Println("Sending message", msg)
 	discordClient.ChannelMessageSend(channelId, outMsg)
 }
 
@@ -273,7 +275,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Content == "!source" {
 		s.ChannelMessageSend(m.ChannelID, "https://github.com/RyanDeLap/DigitalCoffee-Announcement-Bot")
 	}
-
 }
 
 func contains(s []string, e string) bool {
